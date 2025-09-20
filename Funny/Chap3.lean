@@ -253,22 +253,22 @@ theorem normal_form_is_value : ∀ (x : B), is_normal_form x → ∃y, x = B.val
     exact nf y ev
 
 inductive MultiStep : Rel B B where
-  | rfl : ∀ x, MultiStep x x
-  | single : ∀ x y, Eval x y → MultiStep x y
-  | trans : ∀ x y z, MultiStep x y → MultiStep y z → MultiStep x z
+  | rfl : ∀ {x}, MultiStep x x
+  | single : ∀ {x y}, Eval x y → MultiStep x y
+  | trans : ∀ {x y z}, MultiStep x y → MultiStep y z → MultiStep x z
 
 infixl:50 "⇒" => MultiStep
 
 theorem normal_form_only_eval_to_itself : ∀ x y, is_normal_form x → MultiStep x y → x = y := by
   intro x y nfx mse
   induction mse with
-  | rfl _ =>
+  | rfl =>
     rfl
-  | single x₁ y₁ ev =>
+  | single ev =>
     simp at nfx
     exfalso
-    exact nfx y₁ ev
-  | trans x₁ x₂ x₃ mse₁ mse₂ ih₁ ih₂ =>
+    exact nfx _ ev
+  | trans mse₁ mse₂ ih₁ ih₂ =>
     have eq₁ := ih₁ nfx
     rw [eq₁] at nfx
     have eq₂ := ih₂ nfx
@@ -277,12 +277,12 @@ theorem normal_form_only_eval_to_itself : ∀ x y, is_normal_form x → MultiSte
 theorem mid_step : ∀ {x y z}, x ⇒ y → Eval x z → x = y ∨ z ⇒ y := by
   intro x y z mse ev
   induction mse with
-  | rfl _ => left; rfl
-  | single _ _ ev₁ =>
+  | rfl => left; rfl
+  | single ev₁ =>
     right
     rw [determinancy_of_one_step ev ev₁]
-    exact MultiStep.rfl _
-  | trans a b c mse₁ mse₂ ih₁ ih₂ =>
+    exact MultiStep.rfl
+  | trans mse₁ mse₂ ih₁ ih₂ =>
     cases ih₁ ev with
     | inl h =>
       rw [h] at ev
@@ -293,22 +293,22 @@ theorem mid_step : ∀ {x y z}, x ⇒ y → Eval x z → x = y ∨ z ⇒ y := by
       | inr h₁ =>
         right; exact h₁
     | inr h =>
-      right; exact MultiStep.trans _ _ _ h mse₂
+      right; exact MultiStep.trans h mse₂
 
 theorem helper : ∀ {x y z}, x ⇒ y → x ⇒ z → is_normal_form y → z ⇒ y := by
   intro x y z x_e_y x_e_z nfy
   induction x_e_z with
-  | rfl a => exact x_e_y
-  | single a b ih =>
+  | rfl => exact x_e_y
+  | single ih =>
     cases x_e_y with
-    | rfl _ =>
+    | rfl =>
       simp at nfy
       exfalso
-      exact nfy b ih
-    | single a₁ b₁ ih₁ =>
+      exact nfy _ ih
+    | single ih₁ =>
       rw [determinancy_of_one_step ih ih₁]
-      exact MultiStep.rfl y
-    | trans x₁ x₂ x₃ mse₁ mse₂ =>
+      exact MultiStep.rfl
+    | trans mse₁ mse₂ =>
       cases mid_step mse₁ ih with
       | inl h₁ =>
         rw [←h₁] at mse₂
@@ -317,12 +317,12 @@ theorem helper : ∀ {x y z}, x ⇒ y → x ⇒ z → is_normal_form y → z ⇒
           exfalso
           simp at nfy
           rw [h₂] at ih
-          exact nfy b ih
+          exact nfy _ ih
         | inr h₂ =>
           exact h₂
       | inr h₁ =>
-        exact MultiStep.trans _ _ _ h₁ mse₂
-  | trans a b c mse₁ mse₂ ih₁ ih₂ =>
+        exact MultiStep.trans h₁ mse₂
+  | trans mse₁ mse₂ ih₁ ih₂ =>
     have := ih₁ x_e_y
     exact ih₂ this
 
@@ -330,11 +330,11 @@ theorem helper₂ : ∀ x y, is_normal_form x → x ⇒ y → x = y := by
   intro x y nfx xey
   induction xey with
   | rfl => rfl
-  | single a b ev =>
+  | single ev =>
     simp at nfx
     exfalso
-    exact nfx b ev
-  | trans a b c mse₁ mse₂ ih₁ ih₂ =>
+    exact nfx _ ev
+  | trans mse₁ mse₂ ih₁ ih₂ =>
     rw [ih₁ nfx]
     rw [ih₁ nfx] at nfx
     exact ih₂ nfx
@@ -344,46 +344,109 @@ theorem uniqueness_of_normal_forms : ∀ t u u', is_normal_form u → is_normal_
   have u_value := normal_form_is_value u nfu
   have u'_value := normal_form_is_value u' nfu'
   induction mse with
-  | rfl _ =>
+  | rfl =>
     cases mse' with
-    | rfl _ => rfl
-    | single _ _ ev =>
+    | rfl => rfl
+    | single ev =>
       simp at nfu
       exfalso
       exact nfu u' ev
-    | trans x y z h₁ h₂ =>
-      have x_eq_y := normal_form_only_eval_to_itself _ y nfu h₁
+    | trans h₁ h₂ =>
+      have x_eq_y := normal_form_only_eval_to_itself _ _ nfu h₁
       rw [x_eq_y] at nfu
       have y_eq_u := normal_form_only_eval_to_itself _ u' nfu h₂
       rw [x_eq_y, y_eq_u]
-  | single x y ev =>
+  | single ev =>
     cases mse' with
-    | rfl _ =>
+    | rfl =>
       simp at nfu'
       exfalso
-      exact nfu' y ev
-    | single _ _ ev₁ =>
+      exact nfu' _ ev
+    | single ev₁ =>
       exact determinancy_of_one_step ev ev₁
-    | trans a b c h₁ h₂ =>
-      have x_ev_y := MultiStep.single _ _ ev
-      have x_ev_u' := MultiStep.trans _ _ _ h₁ h₂
+    | trans h₁ h₂ =>
+      have x_ev_y := MultiStep.single ev
+      have x_ev_u' := MultiStep.trans h₁ h₂
       have y_ev_u' := helper x_ev_u' x_ev_y nfu'
-      exact helper₂ y u' nfu y_ev_u'
+      exact helper₂ _ u' nfu y_ev_u'
 
-  | trans x y z h₁ h₂ ih₁ ih₂ =>
+  | trans h₁ h₂ ih₁ ih₂ =>
     cases mse' with
-    | rfl _ =>
-      have u'_eq_y := normal_form_only_eval_to_itself u' y nfu' h₁
+    | rfl =>
+      have u'_eq_y := normal_form_only_eval_to_itself u' _ nfu' h₁
       rw [u'_eq_y] at ih₂
-      have  z_eq_y := ih₂ nfu (MultiStep.rfl y) u_value
+      have  z_eq_y := ih₂ nfu MultiStep.rfl u_value
       rw [z_eq_y, u'_eq_y]
-    | single a b ev₁ =>
-      have x_ev_u' : x ⇒ u' := MultiStep.single x u' ev₁
+    | single ev₁ =>
+      have x_ev_u' := MultiStep.single ev₁
       suffices ∀ {x y z}, x ⇒ y → x ⇒ z → is_normal_form y → z ⇒ y by
         have y_ev_u' := this x_ev_u' h₁ nfu'
         exact ih₂ nfu y_ev_u' u_value
       exact helper
-    | trans a b c h₃ h₄ =>
-      have x_ev_u' := MultiStep.trans _ _ _ h₃ h₄
+    | trans h₃ h₄ =>
+      have x_ev_u' := MultiStep.trans h₃ h₄
       have y_ev_u' := helper x_ev_u' h₁ nfu'
       exact ih₂ nfu y_ev_u' u_value
+
+theorem multi_step_if
+  : ∀ {a b c d},
+  a ⇒ b →
+  B.if_then_else a c d ⇒ B.if_then_else b c d := by
+  intro a b c d aeb
+  induction aeb with
+  | rfl =>
+    exact MultiStep.rfl
+  | single ev =>
+    have := @Eval.e_if _ _ c d ev
+    exact MultiStep.single this
+  | trans h₁ h₂ ih₁ ih₂ =>
+    exact MultiStep.trans ih₁ ih₂
+
+theorem multi_step_if_then_else
+  : ∀ {a b c d},
+  a ⇒ b →
+  is_normal_form b →
+  B.if_then_else a c d ⇒ c ∨ B.if_then_else a c d ⇒ d := by
+  intro a b c d aeb bnf
+  have msi := @multi_step_if a b c d aeb
+  suffices B.if_then_else b c d ⇒ c ∨ B.if_then_else b c d ⇒ d by
+    cases this with
+    | inl x =>
+      left
+      exact MultiStep.trans msi x
+    | inr x =>
+      right
+      exact MultiStep.trans msi x
+
+  have ⟨ y, p ⟩ := normal_form_is_value _ bnf
+  cases b with
+  | val bool =>
+    cases bool with
+    | true =>
+      left
+      have := @Eval.e_if_true c d
+      exact MultiStep.single this
+    | false =>
+      right
+      have := @Eval.e_if_false c d
+      exact MultiStep.single this
+  | if_then_else => contradiction
+
+theorem termination_of_evaluation : ∀ t : B, ∃ u, is_normal_form u ∧ t ⇒ u := by
+  intro t
+  induction t with
+  | val v =>
+    have := values_are_normal_form v
+    exact ⟨ B.val v, And.intro this MultiStep.rfl ⟩
+  | if_then_else x y z ih₁ ih₂ ih₃ =>
+    have ⟨ cond_value, cond_nf ⟩ := ih₁
+    have := @multi_step_if_then_else x _ y z cond_nf.right cond_nf.left
+    cases this with
+    | inl h₁ =>
+      have ⟨ cond_value₁, cond_nf₁ ⟩ := ih₂
+      have := MultiStep.trans h₁ cond_nf₁.right
+      exact ⟨ cond_value₁, And.intro cond_nf₁.left this ⟩
+    | inr h₁ =>
+      have ⟨ cond_value₁, cond_nf₁ ⟩ := ih₃
+      have := MultiStep.trans h₁ cond_nf₁.right
+      exact ⟨ cond_value₁, And.intro cond_nf₁.left this ⟩
