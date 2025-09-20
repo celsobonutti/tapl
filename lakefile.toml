@@ -1,0 +1,20 @@
+name = "funny"
+version = "0.1.0"
+defaultTargets = ["funny"]
+
+[[lean_lib]]
+name = "Funny"
+
+[[lean_exe]]
+name = "funny"
+root = "Main"
+
+[[require]]
+name = "batteries"
+scope = "leanprover-community"
+rev = "stable"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "stable"
