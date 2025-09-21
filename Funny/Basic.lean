@@ -1,6 +1,3 @@
-import Mathlib.Data.Set.Defs
-import Mathlib.Order.Defs.Unbundled
-
 example {α β : Prop} (imp : α → β) : ¬β → ¬α := by
   intro nb na
   apply nb
