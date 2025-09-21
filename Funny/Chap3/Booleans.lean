@@ -3,25 +3,28 @@ import Mathlib.Data.Rel
 
 open Std
 
-inductive Bval : Type where
-  | true : Bval
-  | false : Bval
-
 inductive B : Type where
-  | val : Bval → B
+  | true : B
+  | false : B
   | if_then_else : B → B → B → B
 
-instance : Coe Bval B where
-  coe := B.val
+inductive IsValue : B → Prop where
+  | true : IsValue B.true
+  | false : IsValue B.false
+
+theorem IsValue.cases : ∀ {x}, IsValue x → x = B.true ∨ x = B.false := by
+  intro x is_value
+  cases is_value <;> simp
 
 inductive Eval : Rel B B where
-  | e_if_true : ∀ {t₂ t₃}, Eval (B.if_then_else Bval.true t₂ t₃) t₂
-  | e_if_false : ∀ {t₂ t₃}, Eval (B.if_then_else Bval.false t₂ t₃) t₃
+  | e_if_true : ∀ {t₂ t₃}, Eval (B.if_then_else B.true t₂ t₃) t₂
+  | e_if_false : ∀ {t₂ t₃}, Eval (B.if_then_else B.false t₂ t₃) t₃
   | e_if : ∀ {t₁ t₁' t₂ t₃}, Eval t₁ t₁' → Eval (B.if_then_else t₁ t₂ t₃) (B.if_then_else t₁' t₂ t₃)
 
-theorem values_do_not_eval : ∀ (val : Bval), ¬∃x : B, Eval (B.val val) x := by
-  intro v ⟨x, ev⟩
-  cases ev
+theorem values_do_not_eval : ∀ (x : B), {_ : IsValue x} → ¬∃y : B, Eval x y := by
+  intro x is_value ⟨y, ev⟩
+  have := is_value.cases
+  cases ev <;> contradiction
 
 theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') → t' = t'' := by
   intro t t' t'' ev₁ ev₂
@@ -43,29 +46,30 @@ theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') 
 @[simp]
 def is_normal_form (x : B) : Prop := ¬∃y : B, Eval x y
 
-theorem values_are_normal_form : ∀ (v : Bval), is_normal_form (B.val v) := by
+theorem values_are_normal_form : ∀ v, (_ : IsValue v := by simp) → is_normal_form v := by
   simp [is_normal_form]
-  intro v x ev
-  cases ev
+  intro v is_value x ev
+  cases ev <;> contradiction
 
 theorem conditional_not_normal_form : ∀ (a b c), ¬(is_normal_form (B.if_then_else a b c)) := by
   intro a b c
   simp [is_normal_form]
   induction a generalizing b c with
-  | val m =>
-    cases m with
-    | true => exact ⟨ b, Eval.e_if_true ⟩
-    | false => exact ⟨ c, Eval.e_if_false ⟩
+  | true =>
+    exact ⟨ b, Eval.e_if_true ⟩
+  | false =>
+    exact ⟨ c, Eval.e_if_false ⟩
   | if_then_else a₁ a₂ a₃ ih₁ =>
     have := ih₁ (b := a₂) (c := a₃)
     obtain ⟨ q, hq ⟩ := this
     exact ⟨ _, Eval.e_if hq ⟩
 
-theorem normal_form_is_value : ∀ (x : B), is_normal_form x → ∃y, x = B.val y := by
+theorem normal_form_is_value : ∀ (x : B), is_normal_form x → IsValue x := by
   intro x nf
   simp at nf
   induction x with
-  | val m => use m
+  | true => exact IsValue.true
+  | false => exact IsValue.false
   | if_then_else a b c =>
     exfalso
     have not_nf := conditional_not_normal_form a b c
@@ -239,15 +243,13 @@ theorem multi_step_if_then_else
       right
       exact MultiStep.trans msi x
 
-  have ⟨ y, p ⟩ := normal_form_is_value _ bnf
+  have is_value_b := normal_form_is_value _ bnf
   cases b with
-  | val bool =>
-    cases bool with
-    | true =>
-      left
-      have := @Eval.e_if_true c d
-      exact MultiStep.single this
-    | false =>
+  | true =>
+    left
+    have := @Eval.e_if_true c d
+    exact MultiStep.single this
+  | false =>
       right
       have := @Eval.e_if_false c d
       exact MultiStep.single this
@@ -256,9 +258,12 @@ theorem multi_step_if_then_else
 theorem termination_of_evaluation : ∀ t : B, ∃ u, is_normal_form u ∧ t ⇒ u := by
   intro t
   induction t with
-  | val v =>
-    have := values_are_normal_form v
-    exact ⟨ B.val v, And.intro this MultiStep.rfl ⟩
+  | true =>
+    have := values_are_normal_form B.true IsValue.true
+    exact ⟨ B.true, And.intro this MultiStep.rfl ⟩
+  | false =>
+    have := values_are_normal_form B.false IsValue.false
+    exact ⟨ B.false, And.intro this MultiStep.rfl ⟩
   | if_then_else x y z ih₁ ih₂ ih₃ =>
     have ⟨ cond_value, cond_nf ⟩ := ih₁
     have := @multi_step_if_then_else x _ y z cond_nf.right cond_nf.left
