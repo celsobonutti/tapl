@@ -17,9 +17,9 @@ theorem IsValue.cases : ∀ {x}, IsValue x → x = B.true ∨ x = B.false := by
   cases is_value <;> simp
 
 inductive Eval : Rel B B where
-  | e_if_true : ∀ {t₂ t₃}, Eval (B.if_then_else B.true t₂ t₃) t₂
-  | e_if_false : ∀ {t₂ t₃}, Eval (B.if_then_else B.false t₂ t₃) t₃
-  | e_if : ∀ {t₁ t₁' t₂ t₃}, Eval t₁ t₁' → Eval (B.if_then_else t₁ t₂ t₃) (B.if_then_else t₁' t₂ t₃)
+  | if_true : ∀ {t₂ t₃}, Eval (B.if_then_else B.true t₂ t₃) t₂
+  | if_false : ∀ {t₂ t₃}, Eval (B.if_then_else B.false t₂ t₃) t₃
+  | if_ : ∀ {t₁ t₁' t₂ t₃}, Eval t₁ t₁' → Eval (B.if_then_else t₁ t₂ t₃) (B.if_then_else t₁' t₂ t₃)
 
 theorem values_do_not_eval : ∀ (x : B), {_ : IsValue x} → ¬∃y : B, Eval x y := by
   intro x is_value ⟨y, ev⟩
@@ -29,19 +29,19 @@ theorem values_do_not_eval : ∀ (x : B), {_ : IsValue x} → ¬∃y : B, Eval x
 theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') → t' = t'' := by
   intro t t' t'' ev₁ ev₂
   induction ev₁ with
-  | e_if_true =>
+  | if_true =>
     cases ev₂ with
-    | e_if_true => rfl
-    | e_if => contradiction
-  | e_if_false =>
+    | if_true => rfl
+    | if_ => contradiction
+  | if_false =>
     cases ev₂ with
-    | e_if_false => rfl
-    | e_if => contradiction
-  | e_if i₁ =>
+    | if_false => rfl
+    | if_ => contradiction
+  | if_ i₁ =>
     cases ev₂ with
-    | e_if_true => contradiction
-    | e_if_false => contradiction
-    | e_if i₂ => rw [determinancy_of_one_step i₁ i₂]
+    | if_true => contradiction
+    | if_false => contradiction
+    | if_ i₂ => rw [determinancy_of_one_step i₁ i₂]
 
 @[simp]
 def is_normal_form (x : B) : Prop := ¬∃y : B, Eval x y
@@ -56,13 +56,13 @@ theorem conditional_not_normal_form : ∀ (a b c), ¬(is_normal_form (B.if_then_
   simp [is_normal_form]
   induction a generalizing b c with
   | true =>
-    exact ⟨ b, Eval.e_if_true ⟩
+    exact ⟨ b, Eval.if_true ⟩
   | false =>
-    exact ⟨ c, Eval.e_if_false ⟩
+    exact ⟨ c, Eval.if_false ⟩
   | if_then_else a₁ a₂ a₃ ih₁ =>
     have := ih₁ (b := a₂) (c := a₃)
     obtain ⟨ q, hq ⟩ := this
-    exact ⟨ _, Eval.e_if hq ⟩
+    exact ⟨ _, Eval.if_ hq ⟩
 
 theorem normal_form_is_value : ∀ (x : B), is_normal_form x → IsValue x := by
   intro x nf
@@ -222,7 +222,7 @@ theorem multi_step_if
   | rfl =>
     exact MultiStep.rfl
   | single ev =>
-    have := @Eval.e_if _ _ c d ev
+    have := @Eval.if_ _ _ c d ev
     exact MultiStep.single this
   | trans h₁ h₂ ih₁ ih₂ =>
     exact MultiStep.trans ih₁ ih₂
@@ -247,11 +247,11 @@ theorem multi_step_if_then_else
   cases b with
   | true =>
     left
-    have := @Eval.e_if_true c d
+    have := @Eval.if_true c d
     exact MultiStep.single this
   | false =>
       right
-      have := @Eval.e_if_false c d
+      have := @Eval.if_false c d
       exact MultiStep.single this
   | if_then_else => contradiction
 
