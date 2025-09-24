@@ -165,38 +165,26 @@ theorem structural_induction (P : T → Prop) :
   apply subterms_smaller_size
   exact hr
 
-inductive IsBool : T → Prop where
-  | true : IsBool T.true
-  | false : IsBool T.false
-
+@[simp]
 def is_bool (t : T) : Prop :=
   t = T.true ∨ t = T.false
 
-theorem IsBool.cases : ∀ {x : T}, IsBool x → x = T.true ∨ x = T.false := by
-  intro x is_b
-  cases is_b <;> simp
-
-inductive IsNumber : T → Prop where
-  | zero : IsNumber T.zero
-  | succ : ∀ {n}, {_ : IsNumber n} → IsNumber (T.succ n)
-
+@[simp]
 def is_number (t : T) : Prop :=
-  t = T.zero ∨ ∃ n, t = T.succ n
+  match t with
+  | T.zero => True
+  | T.succ n => is_number n
+  | _ => false
 
-theorem IsNumber.cases : ∀ {x : T}, IsNumber x → x = T.zero ∨ ∃n, IsNumber n ∧ x = T.succ n := by
-  intro x is_n
-  cases is_n <;> simp; assumption
 
-inductive IsValue : T → Prop where
-  | bool : ∀ {t}, {_ : IsBool t} → IsValue t
-  | number : ∀ {n}, {_ : IsNumber n} → IsValue n
+theorem is_number_succ : (t : T) → is_number t → is_number (T.succ t) := by
+  intro t is_number_t
+  simp [is_number]
+  exact is_number_t
 
-theorem IsValue.cases : ∀ {x : T}, IsValue x →
-  (x = T.true ∨ x = T.false) ∨ (x = T.zero ∨ ∃ n : T, IsNumber n ∧ x = T.succ n) := by
-  intro x is_value
-  cases is_value with
-  | @bool is_bool => left; exact is_bool.cases
-  | @number is_number => right; exact is_number.cases
+@[simp]
+def is_value (t : T) : Prop :=
+  is_bool t ∨ is_number t
 
 open T in
 inductive Eval : Rel T T where
@@ -205,26 +193,25 @@ inductive Eval : Rel T T where
   | if_ : ∀ {t₁ t₁' t₂ t₃}, Eval t₁ t₁' → Eval (if_then_else t₁ t₂ t₃) (if_then_else t₁' t₂ t₃)
   | succ : ∀ {t t'}, Eval t t' → Eval (succ t) (succ t')
   | pred_zero : Eval (pred zero) zero
-  | pred_succ : ∀ {t}, {_ : IsNumber t} → Eval (pred (succ t)) t
+  | pred_succ : ∀ {t}, {_ : is_number t} → Eval (pred (succ t)) t
   | pred : ∀ {t t'}, Eval t t' → Eval (pred t) (pred t')
   | is_zero_zero : Eval (is_zero zero) true
-  | is_zero_succ : ∀ {t}, {_ : IsNumber t} → Eval (is_zero (succ t)) false
+  | is_zero_succ : ∀ {t}, {_ : is_number t} → Eval (is_zero (succ t)) false
   | is_zero : ∀ {t t'}, Eval t t' → Eval (is_zero t) (is_zero t')
 
 @[simp]
 def is_normal_form (x : T) : Prop := ¬∃y : T, Eval x y
 
 @[simp]
-def is_stuck (x : T) : Prop := is_normal_form x ∧ ¬IsValue x
+def is_stuck (x : T) : Prop := is_normal_form x ∧ ¬is_value x
 
 theorem succ_is_not_zero : ∀ {t₁ t₂}, Eval (T.succ t₁) t₂ → ¬(t₂ = T.zero) := by
   intro t₁ t₂ ev₁ eq
   rw [eq] at ev₁
   cases ev₁
 
-theorem booleans_do_not_eval : ∀ (x : T), {_ : IsBool x} → is_normal_form x := by
+theorem booleans_do_not_eval : ∀ (x : T), (_ : is_bool x := by simp) → is_normal_form x := by
   intro x is_bool ⟨y, ev⟩
-  have := is_bool.cases
   cases x with
   | true
   | false => cases ev
@@ -235,9 +222,13 @@ theorem booleans_do_not_eval : ∀ (x : T), {_ : IsBool x} → is_normal_form x 
   | succ =>
     simp_all
 
-theorem numbers_do_not_eval : ∀ (x : T), {_ : IsNumber x} → is_normal_form x := by
-  intro x is_number ⟨y, ev⟩
-  have := is_number.cases
+theorem succ_x_is_number_implies_x_is_number : ∀ (x : T), is_number (T.succ x) → is_number x := by
+  intro y is_number_y
+  simp at is_number_y
+  exact is_number_y
+
+theorem numbers_do_not_eval : ∀ (x : T), {_ : is_number x} → is_normal_form x := by
+  intro x x_is_number ⟨y, ev⟩
   cases x with
   | true
   | false
@@ -246,31 +237,21 @@ theorem numbers_do_not_eval : ∀ (x : T), {_ : IsNumber x} → is_normal_form x
   | if_then_else => simp_all
   | zero => cases ev
   | succ m =>
-    if h : IsNumber m
-    then
-      cases ev with
+    have : is_number m := succ_x_is_number_implies_x_is_number _ x_is_number
+    cases ev with
       | succ ev₁ =>
-        have := @numbers_do_not_eval m h
+        have := @numbers_do_not_eval _ this
         apply this ⟨ _, ev₁ ⟩
-    else
-      simp_all
 
-theorem value_implies_bool_or_number : ∀ x, IsValue x → IsBool x ∨ IsNumber x := by
-  intro x is_value
-  cases is_value with
-  | @bool x => left; assumption
-  | @number x => right; assumption
 
-theorem values_do_not_eval : ∀ (x : T), {_ : IsValue x} → is_normal_form x := by
+theorem values_do_not_eval : ∀ (x : T), {_ : is_value x} → is_normal_form x := by
   intro x is_value
-  have := is_value.cases
-  if h₁ : IsNumber x then
+  if h₁ : is_number x then
     exact @numbers_do_not_eval x h₁
-  else if h₂ : IsBool x then
+  else if h₂ : is_bool x then
     exact @booleans_do_not_eval x h₂
   else
-    have := value_implies_bool_or_number x is_value
-    cases this with
+    cases is_value with
     | inl | inr => contradiction
 
 theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') → t' = t'' := by
@@ -294,7 +275,7 @@ theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') 
          have := determinancy_of_one_step ev₃ ev₄
          rw [this]
        | @pred_succ _ is_number =>
-         have := @IsNumber.succ t'' is_number
+         have := is_number_succ t'' is_number
          have := @numbers_do_not_eval _ this
          exfalso
          exact this ⟨_, ev₃⟩
@@ -306,7 +287,7 @@ theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') 
      | @pred_succ _ is_number =>
        cases ev₂ with
        | @pred t₃ t₄ ev₃ =>
-         have := @IsNumber.succ _ is_number
+         have := is_number_succ _ is_number
          have := @numbers_do_not_eval _ this
          exfalso
          exact this ⟨_, ev₃⟩
@@ -317,14 +298,14 @@ theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') 
        cases ev₂ with
        | is_zero_zero => rfl
        | is_zero ev₃ =>
-         have := @IsNumber.zero
+         have : is_number T.zero := by simp
          have := @numbers_do_not_eval _ this
          exfalso
          exact this ⟨_, ev₃⟩
      | @is_zero_succ _ is_number =>
        cases ev₂ with
        | is_zero ev₃ =>
-         have := @IsNumber.succ _ is_number
+         have := is_number_succ _ is_number
          exfalso
          exact @numbers_do_not_eval _ this ⟨_, ev₃⟩
        | is_zero_succ => rfl
@@ -334,11 +315,11 @@ theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') 
          have := determinancy_of_one_step ev₃ ev₄
          rw [this]
        | @is_zero_succ _ is_number =>
-         have := @IsNumber.succ _ is_number
+         have := is_number_succ _ is_number
          exfalso
          exact @numbers_do_not_eval _ this ⟨_, ev₃⟩
        | is_zero_zero =>
-         have := @IsNumber.zero
+         have : is_number T.zero := by simp
          exfalso
          exact @numbers_do_not_eval _ this ⟨_, ev₃⟩
    | if_then_else x y z =>
@@ -349,26 +330,22 @@ theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') 
          have := determinancy_of_one_step ev₃ ev₄
          rw [this]
        | if_false =>
-         have := @IsBool.false
          exfalso
-         exact @booleans_do_not_eval _ this ⟨_, ev₃⟩
+         exact (booleans_do_not_eval _) ⟨_, ev₃⟩
        | if_true =>
-         have := @IsBool.true
          exfalso
-         exact @booleans_do_not_eval _ this ⟨_, ev₃⟩
+         exact (booleans_do_not_eval _) ⟨_, ev₃⟩
      | if_true =>
        cases ev₂ with
        | if_ ev₃ =>
-         have := @IsBool.true
          exfalso
-         exact @booleans_do_not_eval _ this ⟨_, ev₃⟩
+         exact (booleans_do_not_eval _) ⟨_, ev₃⟩
        | if_true => rfl
      | if_false =>
        cases ev₂ with
        | if_ ev₃ =>
-         have := @IsBool.false
          exfalso
-         exact @booleans_do_not_eval _ this ⟨_, ev₃⟩
+         exact (booleans_do_not_eval _) ⟨_, ev₃⟩
        | if_false => rfl
 
 inductive MultiStep : Rel T T where
@@ -393,49 +370,73 @@ theorem normal_form_only_eval_to_itself : ∀ x y, is_normal_form x → MultiSte
     have eq₂ := ih₂ nfx
     rw [eq₁, eq₂]
 
--- theorem uniqueness_of_normal_forms : ∀ t u u', is_normal_form u → is_normal_form u' → t ⇒ u → t ⇒ u' → u = u' := by
---   intro t u u' nfu nfu' mse mse'
---   induction mse with
---   | rfl =>
---     cases mse' with
---     | rfl => rfl
---     | single ev =>
---       simp at nfu
---       exfalso
---       exact nfu u' ev
---     | trans h₁ h₂ =>
---       have x_eq_y := normal_form_only_eval_to_itself _ _ nfu h₁
---       rw [x_eq_y] at nfu
---       have y_eq_u := normal_form_only_eval_to_itself _ u' nfu h₂
---       rw [x_eq_y, y_eq_u]
---   | single ev =>
---     cases mse' with
---     | rfl =>
---       simp at nfu'
---       exfalso
---       exact nfu' _ ev
---     | single ev₁ =>
---       exact determinancy_of_one_step ev ev₁
---     | trans h₁ h₂ =>
---       have x_ev_y := MultiStep.single ev
---       have x_ev_u' := MultiStep.trans h₁ h₂
---       have y_ev_u' := helper x_ev_u' x_ev_y nfu'
---       exact helper₂ _ u' nfu y_ev_u'
+theorem mid_step : ∀ {x y z}, x ⇒ y → Eval x z → x = y ∨ z ⇒ y := by
+  intro x y z mse ev
+  induction mse with
+  | rfl => left; rfl
+  | single ev₁ =>
+    right
+    rw [determinancy_of_one_step ev ev₁]
+    exact MultiStep.rfl
+  | trans mse₁ mse₂ ih₁ ih₂ =>
+    cases ih₁ ev with
+    | inl h =>
+      rw [h] at ev
+      cases ih₂ ev with
+      | inl h₁ =>
+        rw [h, h₁]
+        left; rfl
+      | inr h₁ =>
+        right; exact h₁
+    | inr h =>
+      right; exact MultiStep.trans h mse₂
 
---   | trans h₁ h₂ ih₁ ih₂ =>
---     cases mse' with
---     | rfl =>
---       have u'_eq_y := normal_form_only_eval_to_itself u' _ nfu' h₁
---       rw [u'_eq_y] at ih₂
---       have  z_eq_y := ih₂ nfu MultiStep.rfl u_value
---       rw [z_eq_y, u'_eq_y]
---     | single ev₁ =>
---       have x_ev_u' := MultiStep.single ev₁
---       suffices ∀ {x y z}, x ⇒ y → x ⇒ z → is_normal_form y → z ⇒ y by
---         have y_ev_u' := this x_ev_u' h₁ nfu'
---         exact ih₂ nfu y_ev_u' u_value
---       exact helper
---     | trans h₃ h₄ =>
---       have x_ev_u' := MultiStep.trans h₃ h₄
---       have y_ev_u' := helper x_ev_u' h₁ nfu'
---       exact ih₂ nfu y_ev_u' u_value
+theorem helper : ∀ {x y z}, x ⇒ y → x ⇒ z → is_normal_form y → z ⇒ y := by
+  intro x y z x_e_y x_e_z nfy
+  induction x_e_z with
+  | rfl => exact x_e_y
+  | single ih =>
+    cases x_e_y with
+    | rfl =>
+      simp at nfy
+      exfalso
+      exact nfy _ ih
+    | single ih₁ =>
+      rw [determinancy_of_one_step ih ih₁]
+      exact MultiStep.rfl
+    | trans mse₁ mse₂ =>
+      cases mid_step mse₁ ih with
+      | inl h₁ =>
+        rw [←h₁] at mse₂
+        cases mid_step mse₂ ih with
+        | inl h₂ =>
+          exfalso
+          simp at nfy
+          rw [h₂] at ih
+          exact nfy _ ih
+        | inr h₂ =>
+          exact h₂
+      | inr h₁ =>
+        exact MultiStep.trans h₁ mse₂
+  | trans mse₁ mse₂ ih₁ ih₂ =>
+    have := ih₁ x_e_y
+    exact ih₂ this
+
+theorem helper₂ : ∀ {x y}, is_normal_form x → x ⇒ y → x = y := by
+  intro x y nfx xey
+  induction xey with
+  | rfl => rfl
+  | single ev =>
+    simp at nfx
+    exfalso
+    exact nfx _ ev
+  | trans mse₁ mse₂ ih₁ ih₂ =>
+    rw [ih₁ nfx]
+    rw [ih₁ nfx] at nfx
+    exact ih₂ nfx
+
+theorem uniqueness_of_normal_forms : ∀ t u u', is_normal_form u → is_normal_form u' → t ⇒ u → t ⇒ u' → u = u' := by
+  intro t u u' nfu nfu' t_to_u t_to_u'
+  have u_to_u' := helper t_to_u' t_to_u nfu'
+  exact helper₂ nfu u_to_u'
+
