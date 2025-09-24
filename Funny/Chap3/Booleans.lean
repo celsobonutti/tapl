@@ -151,7 +151,7 @@ theorem helper : ∀ {x y z}, x ⇒ y → x ⇒ z → is_normal_form y → z ⇒
     have := ih₁ x_e_y
     exact ih₂ this
 
-theorem helper₂ : ∀ x y, is_normal_form x → x ⇒ y → x = y := by
+theorem helper₂ : ∀ {x y}, is_normal_form x → x ⇒ y → x = y := by
   intro x y nfx xey
   induction xey with
   | rfl => rfl
@@ -165,53 +165,9 @@ theorem helper₂ : ∀ x y, is_normal_form x → x ⇒ y → x = y := by
     exact ih₂ nfx
 
 theorem uniqueness_of_normal_forms : ∀ t u u', is_normal_form u → is_normal_form u' → t ⇒ u → t ⇒ u' → u = u' := by
-  intro t u u' nfu nfu' mse mse'
-  have u_value := normal_form_is_value u nfu
-  have u'_value := normal_form_is_value u' nfu'
-  induction mse with
-  | rfl =>
-    cases mse' with
-    | rfl => rfl
-    | single ev =>
-      simp at nfu
-      exfalso
-      exact nfu u' ev
-    | trans h₁ h₂ =>
-      have x_eq_y := normal_form_only_eval_to_itself _ _ nfu h₁
-      rw [x_eq_y] at nfu
-      have y_eq_u := normal_form_only_eval_to_itself _ u' nfu h₂
-      rw [x_eq_y, y_eq_u]
-  | single ev =>
-    cases mse' with
-    | rfl =>
-      simp at nfu'
-      exfalso
-      exact nfu' _ ev
-    | single ev₁ =>
-      exact determinancy_of_one_step ev ev₁
-    | trans h₁ h₂ =>
-      have x_ev_y := MultiStep.single ev
-      have x_ev_u' := MultiStep.trans h₁ h₂
-      have y_ev_u' := helper x_ev_u' x_ev_y nfu'
-      exact helper₂ _ u' nfu y_ev_u'
-
-  | trans h₁ h₂ ih₁ ih₂ =>
-    cases mse' with
-    | rfl =>
-      have u'_eq_y := normal_form_only_eval_to_itself u' _ nfu' h₁
-      rw [u'_eq_y] at ih₂
-      have  z_eq_y := ih₂ nfu MultiStep.rfl u_value
-      rw [z_eq_y, u'_eq_y]
-    | single ev₁ =>
-      have x_ev_u' := MultiStep.single ev₁
-      suffices ∀ {x y z}, x ⇒ y → x ⇒ z → is_normal_form y → z ⇒ y by
-        have y_ev_u' := this x_ev_u' h₁ nfu'
-        exact ih₂ nfu y_ev_u' u_value
-      exact helper
-    | trans h₃ h₄ =>
-      have x_ev_u' := MultiStep.trans h₃ h₄
-      have y_ev_u' := helper x_ev_u' h₁ nfu'
-      exact ih₂ nfu y_ev_u' u_value
+  intro t u u' nfu nfu' t_to_u t_to_u'
+  have u_to_u' := helper t_to_u' t_to_u nfu'
+  exact helper₂ nfu u_to_u'
 
 theorem multi_step_if
   : ∀ {a b c d},
