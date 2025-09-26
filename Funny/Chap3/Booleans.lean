@@ -8,6 +8,12 @@ inductive B : Type where
   | false : B
   | if_then_else : B → B → B → B
 
+@[simp]
+def B.size : B → Nat
+  | B.true
+  | B.false => 1
+  | B.if_then_else x y z => x.size + y.size + z.size + 1
+
 inductive IsValue : B → Prop where
   | true : IsValue B.true
   | false : IsValue B.false
@@ -23,7 +29,6 @@ inductive Eval : Rel B B where
 
 theorem values_do_not_eval : ∀ (x : B), {_ : IsValue x} → ¬∃y : B, Eval x y := by
   intro x is_value ⟨y, ev⟩
-  have := is_value.cases
   cases ev <;> contradiction
 
 theorem determinancy_of_one_step : ∀ {t t' t''}, (Eval t t') → (Eval t t'') → t' = t'' := by
@@ -232,3 +237,102 @@ theorem termination_of_evaluation : ∀ t : B, ∃ u, is_normal_form u ∧ t ⇒
       have ⟨ cond_value₁, cond_nf₁ ⟩ := ih₃
       have := MultiStep.trans h₁ cond_nf₁.right
       exact ⟨ cond_value₁, And.intro cond_nf₁.left this ⟩
+
+theorem evaluation_decreases : ∀ x y, Eval x y → y.size < x.size := by
+  intro x y ev
+  induction ev with
+  | @if_true t₂ t₃
+  | @if_false t₂ t₃ => simp [B.size]; omega
+  | if_ _ ih₁ => simp [B.size]; exact ih₁
+
+theorem exists_evaluation : ∀ x, ¬is_normal_form x → ∃ y, Eval x y := by
+  intro x not_normal_form
+  induction x with
+  | true => exfalso; exact not_normal_form (@values_are_normal_form B.true IsValue.true)
+  | false => exfalso; exact not_normal_form (@values_are_normal_form B.false IsValue.false)
+  | if_then_else a b c ih₁ ih₂ ih₃ =>
+    if h : is_normal_form a
+    then
+      cases a with
+      | true => exact ⟨ b, Eval.if_true ⟩
+      | false => exact ⟨ c, Eval.if_false ⟩
+      | if_then_else => simp_all
+    else
+      have ⟨ d, ev₁ ⟩ := ih₁ h
+      use B.if_then_else d b c
+      exact Eval.if_ ev₁
+
+theorem exists_evaluation_decreasing : ∀ x, ¬is_normal_form x → ∃ y, Eval x y → y.size < x.size := by
+  intro x not_normal_form
+  have ⟨ y, ev ⟩ := exists_evaluation x not_normal_form
+  use y
+  exact evaluation_decreases x y
+
+theorem size_never_zero : ∀ x : B, x.size ≠ 0 := by
+  intro x
+  induction x with
+  | true
+  | false
+  | if_then_else a b c ih₁ ih₂ ih₃ => simp
+
+theorem size_one_is_value : ∀ x, x.size = 1 → IsValue x := by
+  intro x x_size
+  cases x with
+  | true => exact IsValue.true
+  | false => exact IsValue.false
+  | if_then_else a b c =>
+    simp at x_size
+    have := size_never_zero c
+    omega
+
+theorem size_one_is_normal_form : ∀ x, x.size = 1 → is_normal_form x := by
+  intro x size
+  exact values_are_normal_form x (size_one_is_value x size)
+
+theorem helper₃ : ∀ a b c d, a ⇒ b → B.if_then_else a c d ⇒ B.if_then_else b c d := by
+  intro a b c d a_to_b
+  induction a_to_b with
+  | rfl => exact MultiStep.rfl
+  | single s => exact MultiStep.single (Eval.if_ s)
+  | trans x y ih₁ ih₂ => exact MultiStep.trans ih₁ ih₂
+
+theorem helper₄ : ∀ a b c d, is_normal_form b → a ⇒ b → B.if_then_else a c d ⇒ c ∨ B.if_then_else a c d ⇒ d := by
+  intro a b c d nfb a_to_b
+  have to_b := helper₃ a b c d a_to_b
+  have b_value := normal_form_is_value b nfb
+  have := b_value.cases
+
+  induction b with
+  | true =>
+    apply Or.inl
+    have : B.if_then_else B.true c d ⇒ c := MultiStep.single Eval.if_true
+    exact MultiStep.trans to_b this
+  | false =>
+    apply Or.inr
+    have : B.if_then_else B.false c d ⇒ d := MultiStep.single Eval.if_false
+    exact MultiStep.trans to_b this
+  | if_then_else => simp_all
+
+theorem helper₅ : ∀ t : B, ∃ u, u.size = 1 ∧ t ⇒ u := by
+  intro t
+  induction t with
+  | true => exact ⟨ B.true, And.intro (by simp) MultiStep.rfl ⟩
+  | false => exact ⟨ B.false, And.intro (by simp) MultiStep.rfl ⟩
+  | if_then_else a b c ih₁ ih₂ ih₃ =>
+    have ⟨ x, ⟨ x_size, x_eval ⟩ ⟩ := ih₁
+    have ⟨ y, ⟨ y_size, y_eval ⟩ ⟩ := ih₂
+    have ⟨ z, ⟨ z_size, z_eval ⟩ ⟩ := ih₃
+    have := helper₄ a x b c (size_one_is_normal_form _ x_size) x_eval
+    cases this with
+    | inl to_c =>
+      have := MultiStep.trans to_c y_eval
+      use y
+    | inr to_d =>
+      have := MultiStep.trans to_d z_eval
+      use z
+
+theorem termination_of_evaluation' : ∀ t : B, ∃ u, is_normal_form u ∧ t ⇒ u := by
+  intro t
+  have ⟨ u, ⟨ u_size, u_eval ⟩ ⟩ := helper₅ t
+  have := size_one_is_normal_form u u_size
+  use u

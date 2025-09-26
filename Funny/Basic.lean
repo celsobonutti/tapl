@@ -1,15 +1,9 @@
-example {α β : Prop} (imp : α → β) : ¬β → ¬α := by
-  intro nb na
-  apply nb
-  apply imp
-  exact na
+def Filter (list : List α) : Type :=
+  if list.length >= 1
+  then Unit
+  else Empty
 
-example {α β : Prop} (or : α ∨ β) : ¬α → β := by
-  intro na
-  apply or.elim
-  case left =>
-    intro a
-    contradiction
-  case right =>
-    intro b
-    exact b
+def withNotEmpty (list : List α) (_ : Filter list) (f : List α → β) : β := f list
+
+#eval withNotEmpty [1, 2, 3, 4] () List.sum
+#eval withNotEmpty [] _ <| List.map (Nat.add 1)

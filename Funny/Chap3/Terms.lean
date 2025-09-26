@@ -7,6 +7,7 @@ import Mathlib.Data.Finset.Card
 import Init.Data.Nat.Basic
 import Mathlib.Data.Finset.NAry
 import Mathlib.Data.Rel
+import Mathlib.Data.Real.Basic
 
 open Std
 
@@ -38,6 +39,7 @@ def T.Constants : T → Finset T
   | T.is_zero x => x.Constants
   | T.if_then_else x y z => x.Constants ∪ y.Constants ∪ z.Constants
 
+@[simp]
 def T.size : T → Nat
   | T.true
   | T.false
@@ -167,7 +169,9 @@ theorem structural_induction (P : T → Prop) :
 
 @[simp]
 def is_bool (t : T) : Prop :=
-  t = T.true ∨ t = T.false
+  match t with
+  | T.true | T.false => True
+  | _ => False
 
 @[simp]
 def is_number (t : T) : Prop :=
@@ -222,7 +226,7 @@ theorem booleans_do_not_eval : ∀ (x : T), (_ : is_bool x := by simp) → is_no
   | succ =>
     simp_all
 
-theorem succ_x_is_number_implies_x_is_number : ∀ (x : T), is_number (T.succ x) → is_number x := by
+theorem succ_x_is_number_implies_x_is_number : ∀ {x : T}, is_number (T.succ x) → is_number x := by
   intro y is_number_y
   simp at is_number_y
   exact is_number_y
@@ -237,7 +241,7 @@ theorem numbers_do_not_eval : ∀ (x : T), {_ : is_number x} → is_normal_form 
   | if_then_else => simp_all
   | zero => cases ev
   | succ m =>
-    have : is_number m := succ_x_is_number_implies_x_is_number _ x_is_number
+    have : is_number m := succ_x_is_number_implies_x_is_number x_is_number
     cases ev with
       | succ ev₁ =>
         have := @numbers_do_not_eval _ this
@@ -440,3 +444,31 @@ theorem uniqueness_of_normal_forms : ∀ t u u', is_normal_form u → is_normal_
   have u_to_u' := helper t_to_u' t_to_u nfu'
   exact helper₂ nfu u_to_u'
 
+theorem eval_decreases : ∀ {x y}, Eval x y → y.size < x.size := by
+  intro x y ev
+  induction ev with
+  | if_true | if_false => simp; omega
+  | is_zero_zero | is_zero_succ => simp
+  | succ ev₁ ih => simp; assumption
+  | is_zero => simp; assumption
+  | pred_zero => simp
+  | pred_succ => simp; omega
+  | pred => simp; assumption
+  | if_ => simp; assumption
+
+theorem termination_of_evaluation : ∀ t : T, ∃ u, is_normal_form u ∧ t ⇒ u := by
+  intro t
+  if h : is_normal_form t then
+    use t
+    apply And.intro
+    exact h
+    exact MultiStep.rfl
+  else
+    simp at h
+    have ⟨ v, h ⟩ := h
+    have := eval_decreases h
+    have ⟨ u, ⟨ nfu, v_to_u ⟩ ⟩ := termination_of_evaluation v
+    have t_to_v := MultiStep.single h
+    have t_to_u := MultiStep.trans t_to_v v_to_u
+    use u
+  termination_by t => t.size
