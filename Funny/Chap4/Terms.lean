@@ -59,18 +59,22 @@ def T.eval (t : T) : T :=
     match t with
     | if_then_else true t₂ _ => t₂.eval
     | if_then_else false _ t₃ => t₃.eval
-    | succ x => succ x.eval
+    | succ m =>
+      if is_numerical m.eval then
+        succ m.eval
+      else
+        t
     | pred zero => zero
     | pred (succ m) =>
-      if is_numerical m then
+      if is_numerical m.eval then
         m.eval
       else
-        pred (succ m.eval)
+        t
     | pred x => pred x.eval
     | is_zero zero => true
     | is_zero (succ m) =>
-      if is_numerical m then
+      if is_numerical m.eval then
         false
       else
-        is_zero (succ m.eval)
+        t
     | _ => t
